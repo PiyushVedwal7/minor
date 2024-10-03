@@ -1,0 +1,89 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Scanner;
+
+public class db_st1 {
+    private HashMap<String, String> database;
+
+    // Constructor
+    public db_st1() {
+        database = new HashMap<>();
+    }
+
+   
+    public void loadDataFromFile(String filePath) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(": ", 2); 
+                if (parts.length == 2) {
+                    String key = parts[0].trim();
+                    String value = parts[1].trim();
+                    database.put(key, value);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("An error occurred while reading the file: " + e.getMessage());
+        }
+    }
+
+    // Custom query to search by key
+    public String queryByKey(String key) {
+        return database.getOrDefault(key.trim(), "Key not found");
+    }
+
+    
+    public String queryByValue(String value) {
+        value = value.trim(); 
+
+        for (Map.Entry<String, String> entry : database.entrySet()) {
+            if (entry.getValue().equals(value)) {
+                return "Found key for value: " + entry.getKey();
+            }
+        }
+        return "Value not found";
+    }
+
+    public static void main(String[] args) {
+        db_st1 db = new db_st1();
+        Scanner scanner = new Scanner(System.in);
+
+        
+        db.loadDataFromFile("C:\\Users\\ACER\\OneDrive\\Desktop\\minor\\db_data.txt");
+
+        try {
+           
+            while (true) {
+                System.out.println("1. Query by key");
+                System.out.println("2. Query by value");
+                System.out.println("3. Exit");
+                System.out.print("Choose an option: ");
+
+                int option = scanner.nextInt();
+                scanner.nextLine(); 
+
+                if (option == 1) {
+                  
+                    System.out.print("Enter a key to search: ");
+                    String searchKey = scanner.nextLine();
+                    System.out.println("Query result for key: " + db.queryByKey(searchKey));
+                } else if (option == 2) {
+                   
+                    System.out.print("Enter a value to search: ");
+                    String searchValue = scanner.nextLine();
+                    System.out.println("Query result for value: " + db.queryByValue(searchValue));
+                } else if (option == 3) {
+                    System.out.println("Exiting...");
+                    break; 
+                } else {
+                    System.out.println("Invalid option, please try again.");
+                }
+            }
+        } finally {
+            scanner.close(); 
+        }
+    }
+}
