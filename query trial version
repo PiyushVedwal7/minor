@@ -1,0 +1,278 @@
+import java.util.*;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.FileReader;
+import java.io.BufferedWriter;
+import java.io.BufferedReader;
+import java.io.IOException;
+
+class File_operations {
+    void create_file(String address, String file_name) {
+        File dir = new File(address);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        File FILE = new File(dir, file_name);
+        try {
+            if (FILE.createNewFile()) {
+                System.out.println("\nFile created successfully: \n" + FILE.getAbsolutePath());
+            } else {
+                System.out.println("\nFile already exists: \n" + FILE.getAbsolutePath());
+            }
+        } catch (IOException e) {
+            System.out.println("\nError in creating file.\n");
+            e.printStackTrace();
+        }
+    }
+
+    String file_path(String F_name) {
+        File f = new File(F_name);
+        return f.getAbsolutePath();
+    }
+}
+
+class Data_write_read {
+    void data_write(String f_path, String data) {
+        try {
+            FileWriter F_write = new FileWriter(f_path);
+            BufferedWriter B_Write = new BufferedWriter(F_write);
+            B_Write.write(data);
+            B_Write.close();
+            F_write.close();
+            System.out.println("Data entered in the file: \t" + f_path);
+        } catch (IOException e) {
+            System.out.println(e);
+        }
+    }
+
+    void data_read(String f_path) {
+        try {
+            FileReader F_Read = new FileReader(f_path);
+            BufferedReader B_read = new BufferedReader(F_Read);
+            String str;
+            System.out.println("Reading data from file: " + f_path);
+            while ((str = B_read.readLine()) != null) {
+                System.out.println(str);
+            }
+            B_read.close();
+            F_Read.close();
+        } catch (IOException e) {
+            System.out.println(e);
+        }
+    }
+}
+
+class Mapping_task {
+    private HashMap<String, HashMap<String, String>> Main_mapping;
+
+    public Mapping_task() {
+        this.Main_mapping = new HashMap<>();
+    }
+
+    void data_collection() {
+        Scanner s1 = new Scanner(System.in);
+        String Main_key, Sub_key;
+        String data;
+
+        System.out.println("Enter the primary key first.");
+        System.out.println("Later, enter the secondary key for data sub-categorization.");
+        System.out.println("Type 'quit' after all the sub keys are entered.\n\n");
+
+        while (true) {
+            System.out.println("Enter the main key: ");
+            Main_key = s1.nextLine();
+
+            if (Main_key.equalsIgnoreCase("quit")) {
+                break;
+            }
+
+            Main_mapping.putIfAbsent(Main_key, new HashMap<>());
+
+            while (true) {
+                System.out.println("Enter the Sub-key ");
+                System.out.println("(or type 'done' to finish)");
+                Sub_key = s1.nextLine();
+
+                if (Sub_key.equalsIgnoreCase("done")) {
+                    break;
+                }
+
+                System.out.print("Enter Value: ");
+                data = s1.nextLine();
+                Main_mapping.get(Main_key).put(Sub_key, data);
+            }
+        }
+    }
+
+    public void addSubKeysLater() {
+        Scanner s2 = new Scanner(System.in);
+        String main_Key, sub_Key;
+        String data;
+
+        System.out.println("Add more sub-keys to existing main keys");
+        System.out.println("(Type 'exit' to stop):");
+        while (true) {
+            System.out.print("Enter Existing Main Key: ");
+            main_Key = s2.nextLine();
+
+            if (main_Key.equalsIgnoreCase("exit")) {
+                break;
+            }
+
+            if (Main_mapping.containsKey(main_Key)) {
+                while (true) {
+                    System.out.print("Enter Sub-Key ");
+                    System.out.println("Type 'done' to finish adding sub-keys to this main key: ");
+                    sub_Key = s2.nextLine();
+
+                    if (sub_Key.equalsIgnoreCase("done")) {
+                        break;
+                    }
+
+                    System.out.print("Enter Value: ");
+                    data = s2.nextLine();
+                    Main_mapping.get(main_Key).put(sub_Key, data);
+                }
+            } else {
+                System.out.println("Main Key does not exist\t please enter a valid Main Key.");
+            }
+        }
+    }
+
+    public void writeDataToFile(String filename) {
+        HashMap<String, HashMap<String, String>> existingData = new HashMap<>();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
+            String line;
+            String currentMainKey = null;
+
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("Main Key:")) {
+                    currentMainKey = line.substring("Main Key:".length()).trim();
+                    existingData.putIfAbsent(currentMainKey, new HashMap<>());
+                } else if (line.startsWith("Sub-Key:") && currentMainKey != null) {
+                    String[] parts = line.split(", Value:");
+                    String subKey = parts[0].substring("Sub-Key:".length()).trim();
+                    String value = parts.length > 1 ? parts[1].trim() : "";
+                    existingData.get(currentMainKey).put(subKey, value);
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("An error occurred while reading the file.");
+            e.printStackTrace();
+        }
+
+        for (Map.Entry<String, HashMap<String, String>> entry : Main_mapping.entrySet()) {
+            String mainKey = entry.getKey();
+            existingData.putIfAbsent(mainKey, new HashMap<>());
+
+            HashMap<String, String> subMap = entry.getValue();
+            for (Map.Entry<String, String> subEntry : subMap.entrySet()) {
+                existingData.get(mainKey).put(subEntry.getKey(), subEntry.getValue());
+            }
+        }
+
+        try (FileWriter writer = new FileWriter(filename, false)) {
+            for (Map.Entry<String, HashMap<String, String>> entry : existingData.entrySet()) {
+                String mainKey = entry.getKey();
+                writer.write("Main Key: " + mainKey + "\n");
+
+                HashMap<String, String> subMap = entry.getValue();
+                for (Map.Entry<String, String> subEntry : subMap.entrySet()) {
+                    writer.write("    Sub-Key: " + subEntry.getKey() + ", Value: " + subEntry.getValue() + "\n");
+                }
+            }
+            System.out.println("Data successfully updated in " + filename);
+        } catch (IOException e) {
+            System.out.println("An error occurred while writing to the file.");
+            e.printStackTrace();
+        }
+    }
+
+    public void queryData(HashMap<String, HashMap<String, String>> dataMap) {
+        Scanner queryScanner = new Scanner(System.in);
+        String mainKey, subKey;
+
+        System.out.println("Enter 'exit' at any time to stop querying.");
+
+        while (true) {
+            System.out.print("\nMain Key: ");
+            mainKey = queryScanner.nextLine();
+
+            if (mainKey.equalsIgnoreCase("exit")) {
+                System.out.println("Exiting the query process.");
+                break;
+            }
+
+            if (dataMap.containsKey(mainKey)) {
+                HashMap<String, String> subMap = dataMap.get(mainKey);
+                System.out.print("Sub-Key (or leave blank to display all sub-keys): ");
+                subKey = queryScanner.nextLine();
+
+                if (subKey.equalsIgnoreCase("exit")) {
+                    System.out.println("Exiting the query process.");
+                    break;
+                }
+
+                if (subKey.isEmpty()) {
+                    System.out.println("Main Key: " + mainKey + " contains the following sub-keys:");
+                    for (Map.Entry<String, String> entry : subMap.entrySet()) {
+                        System.out.println("Sub-Key: " + entry.getKey() + " -> Value: " + entry.getValue());
+                    }
+                } else {
+                    if (subMap.containsKey(subKey)) {
+                        System.out.println("Value for Main Key: " + mainKey + ", Sub-Key: " + subKey + " -> " + subMap.get(subKey));
+                    } else {
+                        System.out.println("Sub-Key not found.");
+                    }
+                }
+            } else {
+                System.out.println("Main Key not found.");
+            }
+        }
+    }
+
+    public HashMap<String, HashMap<String, String>> readDataFromFile(String filePath) {
+        HashMap<String, HashMap<String, String>> dataMap = new HashMap<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            String currentMainKey = null;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("Main Key:")) {
+                    currentMainKey = line.substring("Main Key:".length()).trim();
+                    dataMap.putIfAbsent(currentMainKey, new HashMap<>());
+                } else if (line.startsWith("Sub-Key:") && currentMainKey != null) {
+                    String[] parts = line.split(", Value:");
+                    String subKey = parts[0].substring("Sub-Key:".length()).trim();
+                    String value = parts.length > 1 ? parts[1].trim() : "";
+                    dataMap.get(currentMainKey).put(subKey, value);
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Error reading data from file.");
+            e.printStackTrace();
+        }
+        return dataMap;
+    }
+}
+
+public class particular_folder_updated {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        File_operations fs = new File_operations();
+        String address = "D:\\Document\\";
+        String file_name = "data_map.txt";
+        fs.create_file(address, file_name);
+        String f_path = fs.file_path(address + file_name);
+
+        Mapping_task M_task = new Mapping_task();
+        M_task.data_collection();
+        M_task.addSubKeysLater();
+
+        HashMap<String, HashMap<String, String>> existingData = M_task.readDataFromFile(f_path);
+        M_task.writeDataToFile(f_path);
+        M_task.queryData(existingData);
+    }
+}
