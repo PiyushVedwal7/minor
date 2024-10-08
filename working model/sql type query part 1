@@ -1,0 +1,104 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Scanner;
+
+public class SimpleDBReader {
+    public static void main(String[] args) {
+        Map<String, Map<String, String>> dataStore = new HashMap<>();
+
+        String filePath = "C:\\Users\\ACER\\OneDrive\\Desktop\\db replica\\data"; 
+
+        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            String currentMainKey = null;
+
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                
+                if (line.startsWith("main Key:")) {
+                    currentMainKey = line.substring(9).trim(); 
+                    dataStore.put(currentMainKey, new HashMap<>()); 
+                } else if (line.startsWith("sub-Key:") && currentMainKey != null) {
+                    String[] parts = line.split(", Value:");
+                    if (parts.length == 2) {
+                        String subKey = parts[0].substring(9).trim(); 
+                        String value = parts[1].trim(); 
+                        dataStore.get(currentMainKey).put(subKey, value); 
+                    }
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Error reading file.");
+            return; 
+        }
+
+        // Query input
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter SQL-like query (e.g., SELECT * WHERE mainKey='key1' AND subKey='key2'): ");
+        String query = scanner.nextLine();
+        
+        performQuery(dataStore, query);
+        
+        scanner.close();
+    }
+
+    private static void performQuery(Map<String, Map<String, String>> dataStore, String query) {
+        
+        String[] parts = query.split(" WHERE ");
+        if (parts.length != 2) {
+            System.out.println("Invalid query format.");
+            return;
+        }
+        
+       
+        String[] selectParts = parts[0].trim().split(" ");
+        if (!selectParts[0].equalsIgnoreCase("SELECT") || !selectParts[1].equals("*")) {
+            System.out.println("Only SELECT * is supported.");
+            return;
+        }
+        
+        String[] conditions = parts[1].trim().split(" AND ");
+        String mainKey = null;
+        String subKey = null;
+
+        for (String condition : conditions) {
+            String[] conditionParts = condition.trim().split("=");
+            if (conditionParts.length != 2) {
+                System.out.println("Invalid condition format.");
+                return;
+            }
+            String key = conditionParts[0].trim().replace("mainKey", "").replace("subKey", "").replace("'", "").trim();
+            String value = conditionParts[1].trim().replace("'", "").trim();
+
+            if (condition.contains("mainKey")) {
+                mainKey = value;
+            } else if (condition.contains("subKey")) {
+                subKey = value;
+            }
+        }
+
+      
+        if (mainKey != null) {
+            Map<String, String> subMap = dataStore.get(mainKey);
+            if (subMap != null) {
+                if (subKey != null) {
+                    String value = subMap.get(subKey);
+                    if (value != null) {
+                        System.out.println("Value for mainKey='" + mainKey + "' and subKey='" + subKey + "': " + value);
+                    } else {
+                        System.out.println("Sub-key '" + subKey + "' not found under main key '" + mainKey + "'.");
+                    }
+                } else {
+                    System.out.println("Sub-keys for main key '" + mainKey + "': " + subMap);
+                }
+            } else {
+                System.out.println("Main key '" + mainKey + "' not found.");
+            }
+        } else {
+            System.out.println("No main key specified.");
+        }
+    }
+}
