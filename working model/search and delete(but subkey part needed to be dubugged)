@@ -1,0 +1,151 @@
+import java.io.*;
+import java.util.*;
+
+public class simple1 {
+    public static void main(String[] args) {
+        Map<String, Map<String, String>> dataStore = new HashMap<>();
+        CRUD crud = new CRUD(dataStore); // Create an instance of CRUD
+        String filePath = "C:\\Users\\ACER\\OneDrive\\Desktop\\minor\\db_data.txt"; 
+
+        loadData(filePath, dataStore);
+
+        Scanner scanner = new Scanner(System.in);
+        while (true) {
+            System.out.print("Enter SQL-like query (or type 'exit' to quit): ");
+            String query = scanner.nextLine().trim();
+            if ("exit".equalsIgnoreCase(query)) break;
+            crud.performQuery(query);
+        }
+        scanner.close();
+    }
+
+    private static void loadData(String filePath, Map<String, Map<String, String>> dataStore) {
+        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+            String line, currentMainKey = null;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("main Key:")) {
+                    currentMainKey = line.substring(9).trim();
+                    dataStore.put(currentMainKey, new HashMap<>());
+                } else if (line.startsWith("sub-Key:") && currentMainKey != null) {
+                    String[] parts = line.split(", Value:");
+                    if (parts.length == 2)
+                        dataStore.get(currentMainKey).put(parts[0].substring(9).trim(), parts[1].trim());
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Error reading file.");
+        }
+    }
+}
+
+class CRUD {
+    private final Map<String, Map<String, String>> dataStore;
+
+    public CRUD(Map<String, Map<String, String>> dataStore) {
+        this.dataStore = dataStore;
+    }
+
+    public void performQuery(String query) {
+        String[] parts = query.split(" ", 3);
+        switch (parts[0].toUpperCase()) {
+            case "SELECT":
+                if (parts.length == 3 && "*".equals(parts[1])) readData(parts[2]);
+                else System.out.println("Only SELECT * is supported.");
+                break;
+            case "INSERT":
+                if (parts.length == 2) insertData(parts[1]);
+                else System.out.println("Invalid INSERT format.");
+                break;
+            case "UPDATE":
+                if (parts.length == 3) updateData(parts[1], parts[2]);
+                else System.out.println("Invalid UPDATE format.");
+                break;
+            case "DELETE":
+                if (parts.length == 2) deleteData(parts[1]);
+                else System.out.println("Invalid DELETE format.");
+                break;
+            default:
+                System.out.println("Unknown command: " + parts[0]);
+        }
+    }
+
+    private void readData(String condition) {
+        Map<String, String> conditions = parseConditions(condition);
+        String mainKey = conditions.get("mainKey"), subKey = conditions.get("subKey");
+
+        if (mainKey != null && dataStore.containsKey(mainKey)) {
+            Map<String, String> subMap = dataStore.get(mainKey);
+            if (subKey != null) {
+                System.out.println(subMap.getOrDefault(subKey, "Sub-key '" + subKey + "' not found."));
+            } else {
+                System.out.println("Sub-keys for mainKey='" + mainKey + "': " + subMap);
+            }
+        } else {
+            System.out.println("Main key '" + mainKey + "' not found.");
+        }
+    }
+
+    private void insertData(String data) {
+        String[] parts = data.split(" VALUES ");
+        if (parts.length == 2) {
+            String mainKey = parts[0].replace("mainKey='", "").replace("'", "").trim();
+            Map<String, String> subMap = dataStore.computeIfAbsent(mainKey, k -> new HashMap<>());
+
+            for (String kv : parts[1].replace("(", "").replace(")", "").split(",")) {
+                String[] keyValue = kv.split("=");
+                if (keyValue.length == 2)
+                    subMap.put(keyValue[0].trim(), keyValue[1].replace("'", "").trim());
+            }
+            System.out.println("Inserted data for mainKey='" + mainKey + "'.");
+        } else {
+            System.out.println("Invalid INSERT format.");
+        }
+    }
+
+    private void updateData(String data, String condition) {
+        String mainKey = data.split(" SET ")[0].replace("mainKey='", "").replace("'", "").trim();
+        Map<String, String> subMap = dataStore.get(mainKey);
+        if (subMap != null) {
+            for (String kv : data.split(" SET ")[1].split(",")) {
+                String[] keyValue = kv.split("=");
+                if (keyValue.length == 2)
+                    subMap.put(keyValue[0].trim(), keyValue[1].replace("'", "").trim());
+            }
+            System.out.println("Updated data for mainKey='" + mainKey + "'.");
+        } else {
+            System.out.println("Main key '" + mainKey + "' not found.");
+        }
+    }
+
+    private void deleteData(String condition) {
+        Map<String, String> conditions = parseConditions(condition);
+        String mainKey = conditions.get("mainKey"), subKey = conditions.get("subKey");
+
+        if (mainKey != null && dataStore.containsKey(mainKey)) {
+            if (subKey != null) {
+                if (dataStore.get(mainKey).containsKey(subKey)) {
+                    dataStore.get(mainKey).remove(subKey);
+                    System.out.println("Deleted subKey='" + subKey + "' under mainKey='" + mainKey + "'.");
+                } else {
+                    System.out.println("Sub-key '" + subKey + "' not found under mainKey='" + mainKey + "'.");
+                }
+            } else {
+                dataStore.remove(mainKey);
+                System.out.println("Deleted mainKey='" + mainKey + "' and its subKeys.");
+            }
+        } else {
+            System.out.println("Main key '" + mainKey + "' not found.");
+        }
+    }
+
+    private Map<String, String> parseConditions(String condition) {
+        Map<String, String> conditions = new HashMap<>();
+        for (String cond : condition.split(" AND ")) {
+            String[] keyValue = cond.split("=");
+            if (keyValue.length == 2)
+                conditions.put(keyValue[0].trim(), keyValue[1].replace("'", "").trim());
+        }
+        return conditions;
+    }
+}
