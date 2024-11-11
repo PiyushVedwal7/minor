@@ -1,0 +1,264 @@
+import java.util.*;
+import java.io.*;
+
+class QueryFormatException extends Exception {
+    public QueryFormatException(String message) {
+        super(message);
+    }
+}
+
+class DataRead {
+    static final String FILE_NAME = "dbms_data.txt";
+
+    void dataRead() {
+        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_NAME))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+        } catch (FileNotFoundException e) {
+            System.out.println("Error: The file '" + FILE_NAME + "' was not found. Please check the file path.");
+        } catch (IOException e) {
+            System.out.println("Error: Unable to read from file due to an I/O error.");
+            e.printStackTrace();
+        }
+    }
+
+    void dataWrite(HashMap<String, HashMap<String, String>> mainMapping) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_NAME))) {
+            for (Map.Entry<String, HashMap<String, String>> mainEntry : mainMapping.entrySet()) {
+                writer.write("Main Key: " + mainEntry.getKey() + "\n");
+                for (Map.Entry<String, String> subEntry : mainEntry.getValue().entrySet()) {
+                    writer.write("    Sub Key: " + subEntry.getKey() + " -> Value: " + subEntry.getValue() + "\n");
+                }
+            }
+            System.out.println("Data successfully written to file.");
+        } catch (IOException e) {
+            System.out.println("Error: Unable to write to file due to an I/O error.");
+            e.printStackTrace();
+        }
+    }
+}
+
+enum CommandType {
+    CREATE, INSERT, UPDATE, DELETE, INVALID
+}
+
+class MappingTask {
+    private final HashMap<String, HashMap<String, String>> mainMapping = new HashMap<>();
+    private final DataRead dataRead;
+
+    MappingTask(DataRead dataRead) {
+        this.dataRead = dataRead;
+    }
+
+    private void validateQuery(String query) throws QueryFormatException {
+        if (query.isEmpty()) {
+            throw new QueryFormatException("Query is empty. Please enter a valid query.");
+        }
+        if (!query.contains(":")) {
+            throw new QueryFormatException("Query must contain a ':' symbol to specify main and sub-keys.");
+        }
+    }
+
+    void deleteMainKey(String mainKey) {
+        if (mainMapping.remove(mainKey) != null) {
+            System.out.println("Main key '" + mainKey + "' deleted.");
+            dataRead.dataWrite(mainMapping);
+        } else {
+            System.out.println("Main key '" + mainKey + "' does not exist.");
+        }
+    }
+
+    void deleteSubKey(String mainKey, List<String> subKeys) {
+        if (mainMapping.containsKey(mainKey)) {
+            HashMap<String, String> subMap = mainMapping.get(mainKey);
+            for (String subKey : subKeys) {
+                if (subMap.remove(subKey) != null) {
+                    System.out.println("Sub-key '" + subKey + "' deleted from main key '" + mainKey + "'.");
+                } else {
+                    System.out.println("Sub-key '" + subKey + "' does not exist under main key '" + mainKey + "'.");
+                }
+            }
+            if (subMap.isEmpty()) {
+                deleteMainKey(mainKey);
+            }
+            dataRead.dataWrite(mainMapping);
+        } else {
+            System.out.println("Main key '" + mainKey + "' does not exist.");
+        }
+    }
+
+    void updateSubKey(String mainKey, Map<String, String> updates) {
+        if (mainMapping.containsKey(mainKey)) {
+            HashMap<String, String> subMap = mainMapping.get(mainKey);
+            for (Map.Entry<String, String> updateEntry : updates.entrySet()) {
+                subMap.put(updateEntry.getKey(), updateEntry.getValue());
+                System.out.println("Updated sub-key '" + updateEntry.getKey() + "' to value '" + updateEntry.getValue() + "'.");
+            }
+            dataRead.dataWrite(mainMapping);
+        } else {
+            System.out.println("Main key '" + mainKey + "' does not exist.");
+        }
+    }
+
+    void processQuery(String query) {
+        query = query.trim();
+
+        try {
+            validateQuery(query);
+            CommandType commandType = getCommandType(query);
+            switch (commandType) {
+                case DELETE:
+                    handleDeleteQuery(query);
+                    break;
+                case CREATE:
+                    handleCreateQuery(query);
+                    break;
+                case INSERT:
+                    handleInsertQuery(query);
+                    break;
+                case UPDATE:
+                    handleUpdateQuery(query);
+                    break;
+                default:
+                    System.out.println("Invalid query.");
+            }
+        } catch (QueryFormatException e) {
+            System.out.println("Query Format Error: " + e.getMessage());
+        } catch (ArrayIndexOutOfBoundsException | NullPointerException e) {
+            System.out.println("Error: Malformed query detected. Please check your syntax and try again.");
+            e.printStackTrace();
+        } catch (Exception e) {
+            System.out.println("An unexpected error occurred while processing the query.");
+            e.printStackTrace();
+        }
+    }
+
+    private CommandType getCommandType(String query) {
+        if (query.toLowerCase().startsWith("create")) {
+            return CommandType.CREATE;
+        } else if (query.toLowerCase().startsWith("insert into")) {
+            return CommandType.INSERT;
+        } else if (query.toLowerCase().startsWith("update")) {
+            return CommandType.UPDATE;
+        } else if (query.toLowerCase().startsWith("delete")) {
+            return CommandType.DELETE;
+        } else {
+            return CommandType.INVALID;
+        }
+    }
+
+    private void handleCreateQuery(String query) {
+        try {
+            String mainKey = query.substring(query.indexOf(":") + 1).trim().replace("\"", "");
+            mainMapping.putIfAbsent(mainKey, new HashMap<>());
+            System.out.println("Main key '" + mainKey + "' created.");
+            dataRead.dataWrite(mainMapping);
+        } catch (Exception e) {
+            System.out.println("Error: Unable to create main key. Please check the format of your CREATE query.");
+        }
+    }
+
+    private void handleInsertQuery(String query) {
+        try {
+            String[] parts = query.split("values");
+            String mainKey = parts[0].substring(query.indexOf(":") + 1).trim().replace("\"", "").replace("insert into ", "").trim();
+            String valuesPart = parts[1].trim();
+
+            if (!mainMapping.containsKey(mainKey)) {
+                System.out.println("Main key '" + mainKey + "' does not exist. Use CREATE first.");
+                return;
+            }
+
+            valuesPart = valuesPart.substring(1, valuesPart.length() - 1);
+            String[] keyValuePairs = valuesPart.split("},\\s*\\{");
+
+            for (String pair : keyValuePairs) {
+                pair = pair.replace("{", "").replace("}", "").trim();
+                String[] keyValue = pair.split(",");
+                String subKey = keyValue[0].split(":")[1].trim();
+                String value = keyValue[1].split(":")[1].trim();
+                mainMapping.get(mainKey).put(subKey, value);
+            }
+            System.out.println("Inserted values into '" + mainKey + "'.");
+            dataRead.dataWrite(mainMapping);
+        } catch (ArrayIndexOutOfBoundsException | NullPointerException e) {
+            System.out.println("Error: Malformed INSERT query. Please check the format.");
+        } catch (Exception e) {
+            System.out.println("Unexpected error while inserting values.");
+            e.printStackTrace();
+        }
+    }
+
+    private void handleUpdateQuery(String query) {
+        try {
+            String[] parts = query.split("values");
+            String mainKey = parts[0].substring(query.indexOf(":") + 1).trim().replace("\"", "").replace("update ", "").trim();
+            String valuesPart = parts[1].trim();
+
+            valuesPart = valuesPart.substring(1, valuesPart.length() - 1);
+            String[] keyValuePairs = valuesPart.split("},\\s*\\{");
+
+            Map<String, String> updates = new HashMap<>();
+            for (String pair : keyValuePairs) {
+                pair = pair.replace("{", "").replace("}", "").trim();
+                String[] keyValue = pair.split(",");
+                String subKey = keyValue[0].split(":")[1].trim();
+                String value = keyValue[1].split(":")[1].trim();
+                updates.put(subKey, value);
+            }
+            updateSubKey(mainKey, updates);
+        } catch (ArrayIndexOutOfBoundsException | NullPointerException e) {
+            System.out.println("Error: Malformed UPDATE query. Please check the format.");
+        } catch (Exception e) {
+            System.out.println("Unexpected error while updating values.");
+            e.printStackTrace();
+        }
+    }
+
+    private void handleDeleteQuery(String query) {
+        try {
+            String[] parts = query.split(":");
+            String mainKey = parts[1].trim().split(" ")[0];
+            List<String> subKeys = new ArrayList<>();
+            if (parts.length > 2) {
+                String subKeyStr = parts[2].trim();
+                subKeys = Arrays.asList(subKeyStr.split(","));
+            }
+
+            if (subKeys.isEmpty()) {
+                deleteMainKey(mainKey);
+            } else {
+                deleteSubKey(mainKey, subKeys);
+            }
+        } catch (ArrayIndexOutOfBoundsException | NullPointerException e) {
+            System.out.println("Error: Malformed DELETE query. Please check the format.");
+        } catch (Exception e) {
+            System.out.println("Unexpected error while deleting values.");
+            e.printStackTrace();
+        }
+    }
+}
+
+public class QueryProcessing {
+    public static void main(String[] args) {
+        DataRead dataRead = new DataRead();
+        MappingTask mappingTask = new MappingTask(dataRead);
+
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Welcome to the Query Processor. Type 'exit' to quit.");
+
+        while (true) {
+            System.out.print("Enter your query: ");
+            String query = scanner.nextLine();
+            if ("exit".equalsIgnoreCase(query)) {
+                break;
+            }
+            mappingTask.processQuery(query);
+        }
+
+        scanner.close();
+        System.out.println("Thank you for using the Query Processor.");
+    }
+}
