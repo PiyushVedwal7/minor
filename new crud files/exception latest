@@ -1,0 +1,261 @@
+import java.util.*;
+import java.io.*;
+
+class DataRead {
+    static final String FILE_NAME = "dbms_data";
+
+    void readData() {
+        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_NAME))) {
+            String line;
+            System.out.println("Reading data from file: " + FILE_NAME);
+
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+        } catch (IOException e) {
+            System.out.println("Error reading data: " + e.getMessage());
+        }
+    }
+}
+
+// Class for managing the HashMap operations
+class MappingTask {
+    static final String FILE_NAME = "dbms_data";
+    private final HashMap<String, HashMap<String, String>> mainMapping = new HashMap<>();
+
+    MappingTask() {
+        loadExistingData();
+    }
+
+    void loadExistingData() {
+        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_NAME))) {
+            String line;
+            String currentMainKey = null;
+
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("main Key:")) {
+                    currentMainKey = line.substring(line.indexOf(":") + 1).trim();
+                    mainMapping.put(currentMainKey, new HashMap<>());
+                } else if (line.startsWith("    sub-Key:") && currentMainKey != null) {
+                    String[] parts = line.split(",");
+                    String subKey = parts[0].split(":")[1].trim();
+                    String value = parts[1].split(":")[1].trim();
+                    mainMapping.get(currentMainKey).put(subKey, value);
+                }
+            }
+            System.out.println("Loaded existing data from file.");
+        } catch (FileNotFoundException e) {
+            System.out.println("File not found. Starting with an empty database.");
+        } catch (IOException e) {
+            System.out.println("Error loading data: " + e.getMessage());
+        }
+    }
+
+    void deleteMainKey(String mainKey) {
+        if (mainMapping.remove(mainKey) != null) {
+            System.out.println("Main key '" + mainKey + "' deleted.");
+        } else {
+            System.out.println("Main key '" + mainKey + "' does not exist.");
+        }
+    }
+
+    void deleteSubKey(String mainKey, List<String> subKeys) {
+        if (mainMapping.containsKey(mainKey)) {
+            HashMap<String, String> subMap = mainMapping.get(mainKey);
+            for (String subKey : subKeys) {
+                if (subMap.remove(subKey) != null) {
+                    System.out.println("Sub-key '" + subKey + "' deleted from main key '" + mainKey + "'.");
+                } else {
+                    System.out.println("Sub-key '" + subKey + "' does not exist under main key '" + mainKey + "'.");
+                }
+            }
+            if (subMap.isEmpty()) {
+                mainMapping.remove(mainKey);
+                System.out.println("Main key '" + mainKey + "' deleted as it has no sub-keys left.");
+            }
+        } else {
+            System.out.println("Main key '" + mainKey + "' does not exist.");
+        }
+    }
+
+    void processQuery(String query) {
+        query = query.trim();
+        if (query.toLowerCase().startsWith("delete")) {
+            handleDeleteQuery(query);
+        } else if (query.toLowerCase().startsWith("create")) {
+            handleCreateQuery(query);
+        } else if (query.toLowerCase().startsWith("insert into")) {
+            handleInsertQuery(query);
+        } else if (query.toLowerCase().startsWith("update")) {
+            handleUpdateQuery(query);
+        } else {
+            System.out.println("\nInvalid query.");
+        }
+        writeDataToFile();
+    }
+
+    private void handleDeleteQuery(String query) {
+        if (query.toLowerCase().startsWith("delete from")) {
+            String mainKey = query.substring(query.indexOf(":") + 1, query.indexOf("{")).trim().replace("\"", "").replace("delete from ", "").trim();
+            String valuesPart = query.substring(query.indexOf("{") + 1, query.indexOf("}")).trim();
+            String[] subKeys = valuesPart.split(",");
+            List<String> subKeysList = new ArrayList<>();
+            for (String key : subKeys) {
+                subKeysList.add(key.split(":")[1].trim());
+            }
+            deleteSubKey(mainKey, subKeysList);
+        } else {
+            String mainKey = query.substring(query.indexOf(":") + 1).trim().replace("\"", "");
+            deleteMainKey(mainKey);
+        }
+    }
+
+    private void handleCreateQuery(String query) {
+        String mainKey = query.substring(query.indexOf(":") + 1).trim().replace("\"", "");
+        mainMapping.putIfAbsent(mainKey, new HashMap<>());
+        System.out.println("Main key '" + mainKey + "' created.");
+    }
+
+    private void handleInsertQuery(String query) {
+        String[] parts = query.split("values", 2);
+        if (parts.length < 2) {
+            System.out.println("Invalid query format for insert.");
+            return;
+        }
+        String mainKey = parts[0].substring(query.indexOf(":") + 1).trim().replace("\"", "").replace("insert into ", "").trim();
+        String valuesPart = parts[1].trim();
+
+        if (!mainMapping.containsKey(mainKey)) {
+            System.out.println("Main key '" + mainKey + "' does not exist. Use CREATE first.");
+            return;
+        }
+
+        valuesPart = valuesPart.substring(1, valuesPart.length() - 1); 
+        String[] keyValuePairs = valuesPart.split("},\\s*\\{"); 
+
+        for (String pair : keyValuePairs) {
+            pair = pair.replace("{", "").replace("}", "").trim();
+            String[] keyValue = pair.split(",");
+            if (keyValue.length != 2) {
+                System.out.println("Invalid key-value format: " + pair);
+                continue;
+            }
+            String subKey = keyValue[0].split(":")[1].trim();
+            String value = keyValue[1].split(":")[1].trim();
+            mainMapping.get(mainKey).put(subKey, value);
+        }
+        System.out.println("\nInserted values into '" + mainKey + "'.");
+    }
+
+    private void handleUpdateQuery(String query) {
+        if (query.contains("to")) {
+            handleUpdateMainKey(query);
+        } else {
+            handleUpdateSubKeys(query);
+        }
+    }
+
+    private void handleUpdateMainKey(String query) {
+        String[] parts = query.split("to", 2);
+        if (parts.length < 2) {
+            System.out.println("Invalid update format for main key.");
+            return;
+        }
+        String oldMainKey = parts[0].substring(query.indexOf(":") + 1).trim().replace("\"", "").replace("update ", "").trim();
+        String newMainKey = parts[1].trim().replace("\"", "");
+
+        if (mainMapping.containsKey(oldMainKey)) {
+            if (!mainMapping.containsKey(newMainKey)) {
+                mainMapping.put(newMainKey, mainMapping.remove(oldMainKey));
+                System.out.println("Main key '" + oldMainKey + "' updated to '" + newMainKey + "'.");
+            } else {
+                System.out.println("Main key '" + newMainKey + "' already exists. Merging entries.");
+                mainMapping.get(newMainKey).putAll(mainMapping.remove(oldMainKey));
+            }
+        } else {
+            System.out.println("Main key '" + oldMainKey + "' does not exist.");
+        }
+    }
+
+    private void handleUpdateSubKeys(String query) {
+        String[] parts = query.split("values", 2);
+        if (parts.length < 2) {
+            System.out.println("Invalid update format for sub-keys.");
+            return;
+        }
+        String mainKey = parts[0].substring(query.indexOf(":") + 1).trim().replace("\"", "").replace("update ", "").trim();
+        String valuesPart = parts[1].trim();
+
+        if (!mainMapping.containsKey(mainKey)) {
+            System.out.println("Main key '" + mainKey + "' does not exist. Use CREATE first.");
+            return;
+        }
+
+        valuesPart = valuesPart.substring(1, valuesPart.length() - 1);
+        String[] keyValuePairs = valuesPart.split("},\\s*\\{");
+
+        for (String pair : keyValuePairs) {
+            pair = pair.replace("{", "").replace("}", "").trim();
+            String[] keyValue = pair.split(",");
+            String subKey = keyValue[0].split(":")[1].trim();
+            String value = keyValue[1].split(":")[1].trim();
+            mainMapping.get(mainKey).put(subKey, value);
+        }
+        System.out.println("\nUpdated values in '" + mainKey + "'.");
+    }
+
+    void writeDataToFile() {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_NAME))) {
+            for (Map.Entry<String, HashMap<String, String>> entry : mainMapping.entrySet()) {
+                String mainKey = entry.getKey();
+                writer.write("main Key: " + mainKey + "\n");
+
+                HashMap<String, String> subMap = entry.getValue();
+                for (Map.Entry<String, String> subEntry : subMap.entrySet()) {
+                    writer.write("    sub-Key: " + subEntry.getKey() + ", Value: " + subEntry.getValue() + "\n");
+                }
+            }
+            System.out.println("\nData successfully updated in the file.");
+        } catch (IOException e) {
+            System.out.println("Error writing data to file: " + e.getMessage());
+        }
+    }
+
+    void dataCollection() {
+        Scanner scanner = new Scanner(System.in);
+        String query;
+
+        System.out.println("Enter SQL-like commands (type 'quit' to exit):");
+        while (true) {
+            System.out.print("> ");
+            query = scanner.nextLine();
+
+            if (query.equalsIgnoreCase("quit")) {
+                writeDataToFile();
+                System.out.println("Exiting... Data saved.");
+                break;
+            }
+            processQuery(query);
+        }
+        scanner.close();
+    }
+}
+
+public class DBMS {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+
+        // Initialize Mapping Task
+        MappingTask mappingTask = new MappingTask();
+
+        // Start data collection and SQL-like query processing
+        System.out.println("Starting the DBMS-like application...");
+        mappingTask.dataCollection();
+
+        // Reading data for demonstration
+        DataRead dataRead = new DataRead();
+        dataRead.readData();
+
+        scanner.close();
+    }
+}
